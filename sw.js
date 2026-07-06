@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#f4f3e6">
+<title>Rova</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="css/rova.css">
+</head>
+<body>
+<header id="topbar">
+  <span class="wordmark">Rova</span>
+  <span id="topdate"></span>
+</header>
+
+<main id="screens">
+  <!-- HOME -->
+  <section id="scr-home" class="screen">
+    <div id="patri-card" class="patri hidden">
+      <div class="patri-label">Patrimonio</div>
+      <div class="patri-value" id="patri-value">—</div>
+      <div class="patri-sub" id="patri-sub"></div>
+    </div>
+    <h3>Quick tasks</h3>
+    <div id="qt-list"></div>
+    <h3>Prossimi eventi</h3>
+    <div id="home-events"></div>
+  </section>
+
+  <!-- CALENDARIO -->
+  <section id="scr-calendar" class="screen hidden">
+    <div class="cal-head">
+      <button class="navbtn" id="cal-prev">‹</button>
+      <span id="cal-title"></span>
+      <button class="navbtn" id="cal-next">›</button>
+    </div>
+    <div class="cal-grid" id="cal-dow"></div>
+    <div class="cal-grid" id="cal-days"></div>
+    <h3 id="cal-day-title"></h3>
+    <div id="cal-day-events"></div>
+    <button class="fab" id="ev-add">+</button>
+  </section>
+
+  <!-- DIARIO -->
+  <section id="scr-diario" class="screen hidden">
+    <div class="dia-head">
+      <span id="dia-date"></span>
+      <span id="dia-kcal" class="muted"></span>
+    </div>
+    <div class="kbar"><div id="kbar-fill"></div></div>
+    <input id="food-search" type="search" placeholder="Cerca alimento o ricetta…">
+    <div id="food-results"></div>
+    <h3>Pasti di oggi</h3>
+    <div id="dia-list"></div>
+  </section>
+
+  <!-- CONSULTA -->
+  <section id="scr-consulta" class="screen hidden">
+    <h3>Medicine</h3><div id="con-med" class="muted">—</div>
+    <h3>Ultimi esami sangue</h3><div id="con-blood" class="muted">—</div>
+    <h3>Scadenze professional</h3><div id="con-pro" class="muted">—</div>
+    <h3>Ultimi movimenti</h3><div id="con-fin" class="muted">—</div>
+  </section>
+
+  <!-- CHAMBER -->
+  <section id="scr-chamber" class="screen hidden">
+    <div class="card" id="ch-status">
+      <div><b>Ultimo sync:</b> <span id="ch-last">mai</span></div>
+      <div class="muted" id="ch-stats"></div>
+    </div>
+    <button class="btn primary" id="ch-import">Importa .rova</button>
+    <input type="file" id="ch-file" accept=".rova,application/zip" hidden>
+    <div class="card">
+      <b>Esporta verso desktop</b>
+      <div id="ch-mods"></div>
+      <button class="btn" id="ch-export">Esporta .rova</button>
+    </div>
+    <div class="secnote">AES-256-GCM · PBKDF2 600k · tutto offline</div>
+  </section>
+</main>
+
+<nav id="tabbar">
+  <button data-scr="home" class="tab active">⌂<span>Home</span></button>
+  <button data-scr="calendar" class="tab">▦<span>Calendario</span></button>
+  <button data-scr="diario" class="tab">◔<span>Diario</span></button>
+  <button data-scr="consulta" class="tab">◉<span>Consulta</span></button>
+  <button data-scr="chamber" class="tab">⇄<span>Chamber</span></button>
+</nav>
+
+<!-- dialogs -->
+<dialog id="dlg-event">
+  <form method="dialog" id="ev-form">
+    <h3 id="ev-dlg-title">Evento</h3>
+    <label>Titolo <input name="title" required></label>
+    <label>Data <input name="date" placeholder="gg/mm/aaaa" required></label>
+    <label>Fine (opz.) <input name="end_date" placeholder="gg/mm/aaaa"></label>
+    <label>Ora <input name="time" placeholder="hh:mm"></label>
+    <label>Colore <input name="color" type="color" value="#4a7a3a"></label>
+    <label>Note <input name="note"></label>
+    <menu>
+      <button value="cancel" class="btn">Annulla</button>
+      <button value="del" class="btn danger hidden" id="ev-del">Elimina</button>
+      <button value="ok" class="btn primary">Salva</button>
+    </menu>
+  </form>
+</dialog>
+
+<dialog id="dlg-pwd">
+  <form method="dialog">
+    <h3 id="pwd-title">Master password</h3>
+    <input type="password" id="pwd-input" autocomplete="off">
+    <div id="pwd-err" class="err"></div>
+    <menu>
+      <button value="cancel" class="btn">Annulla</button>
+      <button value="ok" class="btn primary">OK</button>
+    </menu>
+  </form>
+</dialog>
+
+<dialog id="dlg-conflict">
+  <h3>Conflitto — entrambi modificati</h3>
+  <div id="cf-key" class="muted"></div>
+  <div class="cf-cols">
+    <div><b>QUESTO DISPOSITIVO</b><pre id="cf-local"></pre><span id="cf-local-m" class="muted"></span></div>
+    <div><b>IMPORT (.rova)</b><pre id="cf-import"></pre><span id="cf-import-m" class="muted"></span></div>
+  </div>
+  <menu>
+    <button class="btn" id="cf-keep">Tieni locale</button>
+    <button class="btn primary" id="cf-take">Prendi import</button>
+    <button class="btn" id="cf-auto">Auto</button>
+  </menu>
+</dialog>
+
+<dialog id="dlg-food">
+  <form method="dialog" id="food-form">
+    <h3 id="food-name">Alimento</h3>
+    <label>Quantità (g/ml) <input name="qty" type="number" value="100" min="1"></label>
+    <label>Momento
+      <select name="momento">
+        <option>Colazione</option><option>Pranzo</option>
+        <option>Spuntino</option><option>Cena</option>
+      </select>
+    </label>
+    <menu>
+      <button value="cancel" class="btn">Annulla</button>
+      <button value="ok" class="btn primary">Aggiungi</button>
+    </menu>
+  </form>
+</dialog>
+
+<script type="module" src="js/ui.js"></script>
+<script>
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
+</script>
+</body>
+</html>

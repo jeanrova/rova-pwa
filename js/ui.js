@@ -8,8 +8,14 @@ const el = (t, cls, txt) => { const e = document.createElement(t);
 const MESI = ["Gennaio","Febbraio","Marzo","Aprile","Maggio","Giugno",
               "Luglio","Agosto","Settembre","Ottobre","Novembre","Dicembre"];
 const dmy = d => `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}/${d.getFullYear()}`;
-const parseDmy = s => { const p = (s||"").split("/");
-  return p.length === 3 ? new Date(+p[2], +p[1]-1, +p[0]) : null; };
+const parseDmy = s => {                       // accepts dd/mm/yyyy AND yyyy-mm-dd (desktop _parse_date)
+  s = (s || "").trim(); if (!s) return null;
+  if (s.includes("/")){ const p = s.split("/");
+    return p.length === 3 ? new Date(+p[2], +p[1]-1, +p[0]) : null; }
+  if (s.includes("-")){ const p = s.split("-");
+    return p.length === 3 ? new Date(+p[0], +p[1]-1, +p[2]) : null; }
+  return null;
+};
 const fmtEur = v => v==null ? "—" :
   v.toLocaleString("it-IT",{maximumFractionDigits:0}) + " €";
 

@@ -1,154 +1,160 @@
-/* ROVA PWA — core.js
-   Record identity, content hashing, IndexedDB store, diff-stamping persistence
-   and the Chamber shadow. Mirrors the desktop contract (CHAMBER_FORMAT.md):
-   - record_key: id | uuid | stable-field composite (same field order as desktop)
-   - _modified_at assigned at SAVE time, only to records whose content changed
-   - shadow tracks per-record content hash + timestamp + tombstones (90d purge)
-   Records created on the PWA always get an explicit `id` (uuid), so their
-   cross-device identity never depends on hash details. */
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#f4f3e6">
+<title>Rova</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="stylesheet" href="css/rova.css">
+</head>
+<body>
+<header id="topbar">
+  <span class="wordmark">Rova</span>
+  <span id="topdate"></span>
+</header>
 
-export const STABLE = ["data","date","month","titolo","title","nome","name",
-                       "descrizione","site","user","banca","categoria"];
-const META = new Set(["_modified_at","_deleted","_key"]);
+<main id="screens">
+  <!-- HOME -->
+  <section id="scr-home" class="screen">
+    <div id="patri-card" class="patri hidden">
+      <div class="patri-label">Patrimonio</div>
+      <div class="patri-value" id="patri-value">—</div>
+      <div class="patri-sub" id="patri-sub"></div>
+    </div>
+    <h3>Quick tasks</h3>
+    <div id="qt-list"></div>
+    <h3>Prossimi eventi</h3>
+    <div id="home-events"></div>
+  </section>
 
-export const nowIso = () => new Date().toISOString();          // matches desktop format
-export const uuid = () => crypto.randomUUID();
+  <!-- CALENDARIO -->
+  <section id="scr-calendar" class="screen hidden">
+    <div class="cal-head">
+      <button class="navbtn" id="cal-prev">‹</button>
+      <span id="cal-title"></span>
+      <button class="navbtn" id="cal-next">›</button>
+    </div>
+    <div class="cal-grid" id="cal-dow"></div>
+    <div class="cal-grid" id="cal-days"></div>
+    <h3 id="cal-day-title"></h3>
+    <div id="cal-day-events"></div>
+    <button class="fab" id="ev-add">+</button>
+  </section>
 
-async function sha1hex(str){
-  const b = await crypto.subtle.digest("SHA-1", new TextEncoder().encode(str));
-  return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("");
-}
+  <!-- DIARIO -->
+  <section id="scr-diario" class="screen hidden">
+    <div class="dia-head">
+      <span id="dia-date"></span>
+      <span id="dia-kcal" class="muted"></span>
+    </div>
+    <div class="kbar"><div id="kbar-fill"></div></div>
+    <input id="food-search" type="search" placeholder="Cerca alimento o ricetta…">
+    <div id="food-results"></div>
+    <h3>Pasti di oggi</h3>
+    <div id="dia-list"></div>
+  </section>
 
-/* content hash: device-local only (never crosses devices) — JSON with sorted keys */
-export async function contentHash(rec){
-  const core = {};
-  for (const k of Object.keys(rec).sort()) if (!META.has(k)) core[k] = rec[k];
-  return sha1hex(JSON.stringify(core));
-}
+  <!-- CONSULTA -->
+  <section id="scr-consulta" class="screen hidden">
+    <h3>Medicine</h3><div id="con-med" class="muted">—</div>
+    <h3>Ultimi esami sangue</h3><div id="con-blood" class="muted">—</div>
+    <h3>Scadenze professional</h3><div id="con-pro" class="muted">—</div>
+    <h3>Ultimi movimenti</h3><div id="con-fin" class="muted">—</div>
+  </section>
 
-export async function recordKey(rec){
-  if (rec.id !== undefined && rec.id !== null && rec.id !== "") return "id:"+rec.id;
-  if (rec.uuid) return "uuid:"+rec.uuid;
-  const parts = [];
-  for (const f of STABLE){
-    const v = rec[f];
-    if (v !== undefined && v !== null && v !== "") parts.push(`${f}=${v}`);
-  }
-  if (parts.length) return "k:" + await sha1hex(parts.join("|"));
-  return "h:" + await contentHash(rec);
-}
+  <!-- CHAMBER -->
+  <section id="scr-chamber" class="screen hidden">
+    <div class="card" id="ch-status">
+      <div><b>Ultimo sync:</b> <span id="ch-last">mai</span></div>
+      <div class="muted" id="ch-stats"></div>
+    </div>
+    <button class="btn primary" id="ch-import">Importa .rova</button>
+    <input type="file" id="ch-file" accept=".rova,application/zip" hidden>
+    <div class="card">
+      <b>Esporta verso desktop</b>
+      <div id="ch-mods"></div>
+      <button class="btn" id="ch-export">Esporta .rova</button>
+    </div>
+    <div class="secnote">AES-256-GCM · PBKDF2 600k · tutto offline</div>
+  </section>
+</main>
 
-export function docShape(doc){
-  if (Array.isArray(doc))
-    return doc.every(r => r && typeof r === "object" && !Array.isArray(r)) ? "list" : "doc";
-  if (doc && typeof doc === "object"){
-    const vals = Object.values(doc);
-    if (vals.length && vals.every(v => Array.isArray(v)) &&
-        vals.every(v => v.every(r => r && typeof r === "object" && !Array.isArray(r))))
-      return "sections";
-  }
-  return "doc";
-}
+<nav id="tabbar">
+  <button data-scr="home" class="tab active">⌂<span>Home</span></button>
+  <button data-scr="calendar" class="tab">▦<span>Calendario</span></button>
+  <button data-scr="diario" class="tab">◔<span>Diario</span></button>
+  <button data-scr="consulta" class="tab">◉<span>Consulta</span></button>
+  <button data-scr="chamber" class="tab">⇄<span>Chamber</span></button>
+</nav>
 
-export function* iterRecords(doc, shape){
-  if (shape === "list") for (const r of doc) yield [null, r];
-  else if (shape === "sections")
-    for (const [sec, lst] of Object.entries(doc)) for (const r of lst) yield [sec, r];
-}
+<!-- dialogs -->
+<dialog id="dlg-event">
+  <form method="dialog" id="ev-form">
+    <h3 id="ev-dlg-title">Evento</h3>
+    <label>Titolo <input name="title" required></label>
+    <label>Data <input name="date" placeholder="gg/mm/aaaa" required></label>
+    <label>Fine (opz.) <input name="end_date" placeholder="gg/mm/aaaa"></label>
+    <label>Ora <input name="time" placeholder="hh:mm"></label>
+    <label>Colore <input name="color" type="color" value="#4a7a3a"></label>
+    <label>Note <input name="note"></label>
+    <menu>
+      <button value="cancel" class="btn">Annulla</button>
+      <button value="del" class="btn danger hidden" id="ev-del">Elimina</button>
+      <button value="ok" class="btn primary">Salva</button>
+    </menu>
+  </form>
+</dialog>
 
-/* ── IndexedDB: one object store, key = filename ─────────────────────── */
-const DB_NAME = "rova", STORE = "files";
-let _db = null;
-function idb(){
-  if (_db) return Promise.resolve(_db);
-  return new Promise((res, rej) => {
-    const rq = indexedDB.open(DB_NAME, 1);
-    rq.onupgradeneeded = () => rq.result.createObjectStore(STORE);
-    rq.onsuccess = () => { _db = rq.result; res(_db); };
-    rq.onerror = () => rej(rq.error);
-  });
-}
-export async function dbGet(fname){
-  const db = await idb();
-  return new Promise((res, rej) => {
-    const rq = db.transaction(STORE).objectStore(STORE).get(fname);
-    rq.onsuccess = () => res(rq.result ?? null);
-    rq.onerror = () => rej(rq.error);
-  });
-}
-export async function dbPut(fname, doc){
-  const db = await idb();
-  return new Promise((res, rej) => {
-    const tx = db.transaction(STORE, "readwrite");
-    tx.objectStore(STORE).put(doc, fname);
-    tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error);
-  });
-}
-export async function dbKeys(){
-  const db = await idb();
-  return new Promise((res, rej) => {
-    const rq = db.transaction(STORE).objectStore(STORE).getAllKeys();
-    rq.onsuccess = () => res(rq.result); rq.onerror = () => rej(rq.error);
-  });
-}
+<dialog id="dlg-pwd">
+  <form method="dialog">
+    <h3 id="pwd-title">Master password</h3>
+    <input type="password" id="pwd-input" autocomplete="off">
+    <div id="pwd-err" class="err"></div>
+    <menu>
+      <button value="cancel" class="btn">Annulla</button>
+      <button value="ok" class="btn primary">OK</button>
+    </menu>
+  </form>
+</dialog>
 
-/* ── shadow ──────────────────────────────────────────────────────────── */
-export async function shadowLoad(){
-  return (await dbGet("chamber_shadow.json")) ?? { files: {}, _last_sync_at: "" };
-}
-export const shadowSave = sh => dbPut("chamber_shadow.json", sh);
+<dialog id="dlg-conflict">
+  <h3>Conflitto — entrambi modificati</h3>
+  <div id="cf-key" class="muted"></div>
+  <div class="cf-cols">
+    <div><b>QUESTO DISPOSITIVO</b><pre id="cf-local"></pre><span id="cf-local-m" class="muted"></span></div>
+    <div><b>IMPORT (.rova)</b><pre id="cf-import"></pre><span id="cf-import-m" class="muted"></span></div>
+  </div>
+  <menu>
+    <button class="btn" id="cf-keep">Tieni locale</button>
+    <button class="btn primary" id="cf-take">Prendi import</button>
+    <button class="btn" id="cf-auto">Auto</button>
+  </menu>
+</dialog>
 
-/* ── diff-stamping save (persist.py port) ────────────────────────────── */
-export async function saveJson(fname, doc){
-  const shape = docShape(doc);
-  if (shape === "list" || shape === "sections"){
-    const prev = {};
-    const old = await dbGet(fname);
-    if (old !== null){
-      const os = docShape(old);
-      if (os === "list" || os === "sections")
-        for (const [sec, rec] of iterRecords(old, os)){
-          const k = (sec ? sec+"::" : "") + await recordKey(rec);
-          prev[k] = [await contentHash(rec), rec._modified_at];
-        }
-    }
-    const now = nowIso();
-    for (const [sec, rec] of iterRecords(doc, shape)){
-      const k = (sec ? sec+"::" : "") + await recordKey(rec);
-      const h = await contentHash(rec);
-      const p = prev[k];
-      rec._modified_at = (p && p[0] === h && p[1]) ? p[1] : now;
-    }
-  }
-  await dbPut(fname, doc);
-}
+<dialog id="dlg-food">
+  <form method="dialog" id="food-form">
+    <h3 id="food-name">Alimento</h3>
+    <label>Quantità (g/ml) <input name="qty" type="number" value="100" min="1"></label>
+    <label>Momento
+      <select name="momento">
+        <option>Colazione</option><option>Pranzo</option>
+        <option>Spuntino</option><option>Cena</option>
+      </select>
+    </label>
+    <menu>
+      <button value="cancel" class="btn">Annulla</button>
+      <button value="ok" class="btn primary">Aggiungi</button>
+    </menu>
+  </form>
+</dialog>
 
-/* touch-for-export: same rules as desktop chamber._touch_file */
-export async function touchFile(doc, shape, fsh, now){
-  const seen = new Set();
-  if (shape === "doc"){
-    const h = await sha1hex(JSON.stringify(doc));
-    const ent = fsh["__doc__"];
-    fsh["__doc__"] = { h, m: (ent && ent.h === h) ? ent.m : now };
-    return [];
-  }
-  for (const [sec, rec] of iterRecords(doc, shape)){
-    const k = (sec ? sec+"::" : "") + await recordKey(rec);
-    seen.add(k);
-    const h = await contentHash(rec);
-    const ent = fsh[k], rm = rec._modified_at;
-    if (ent && ent.h === h && ent.m) rec._modified_at = ent.m;
-    else if (rm && (!ent || rm > (ent.m || ""))) rec._modified_at = rm;
-    else rec._modified_at = now;
-    fsh[k] = { h, m: rec._modified_at };
-  }
-  const tombs = [];
-  const cutoff = new Date(Date.now() - 90*864e5).toISOString();
-  for (const [k, ent] of Object.entries(fsh)){
-    if (k === "__doc__" || seen.has(k)) continue;
-    if (!ent.deleted){ ent.deleted = now; ent.m = now; }
-    tombs.push({ _key: k, _deleted: true, _modified_at: ent.m });
-    if (ent.deleted < cutoff) delete fsh[k];
-  }
-  return tombs;
-}
+<script type="module" src="js/ui.js"></script>
+<script>
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
+</script>
+</body>
+</html>
